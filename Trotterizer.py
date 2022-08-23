@@ -27,7 +27,7 @@ class Trotterizer():
         if connectivity_style == 'ZX_cycle':
             self.connectivity_map = ZX_Cycle(self.num_qubits, connection_strength=None)
 
-        self.Ha_prime_circ = self.connectivity_map.decoupled_time_evolution(pauli_strings=self.pauli_strings)
+        self.Ha_prime_circ = self.connectivity_map.decoupled_time_evolution(pauli_strings=self.pauli_strings, clusters=None)
 
 
     def _one_layer(self, layer_idx):
@@ -51,7 +51,7 @@ class Trotterizer():
             layer_circ.append(self.U1(d[i]), qargs=[i])
 
         ## Ha'
-        layer_circ =  layer_circ.compose(Ha_prime_bind)
+        layer_circ = layer_circ.compose(Ha_prime_bind)
 
         ## U1 U2
         for i in range(self.num_qubits):
@@ -61,7 +61,86 @@ class Trotterizer():
 
         return layer_circ
 
-    def trotterize(self, num_layers, swap_map=None):
+    def trotterize(self, num_layers):
+        trotter_circuit = QuantumCircuit(self.num_qubits)
+
+        for i in range(num_layers):
+            layer_circ = self._one_layer(layer_idx=i)
+            trotter_circuit = trotter_circuit.compose(layer_circ)
+            #trotter_circuit.barrier()
+
+        return trotter_circuit
+
+    def _cluster_qubits(self, layer_order):
+        ## layer_order also = stepsize - 1
+        ## layer_order counts from 0
+
+        clusters = []
+        start = 0
+        while start < layer_order+1:
+            cluster = list(range(start, self.num_qubits, layer_order + 1))
+            if len(cluster) > 0:
+                clusters.append(cluster)
+            else:
+                break
+
+        return clusters
+
+    def _add_swap(self, circ, swap_map):
+        def adjacent_swap(q_start, step, rightward):
+            swap_circ = QuantumCircuit(self.num_qubits)
+
+            if rightward == True:
+                for i in range(step):
+                    circ.swap((q_start+i)%self.num_qubits, (q_start+i+1)%self.num_qubits)
+                for i in range(step-1, 0, -1):
+                    circ.swap((q_start+i)%self.num_qubits, (q_start+i-1)%self.num_qubits)
+
+            else:
+                for i in range(step):
+                    circ.swap((q_start-i)%self.num_qubits, (q_start-i-1)%self.num_qubits)
+                for i in range(step-1, 0, -1):
+                    circ.swap((q_start-i)%self.num_qubits, (q_start-i+1)%self.num_qubits)
+
+            return circ
+
+
+        ## The key in swap_map is based on the original qubit number, not position
+        order = list(range(self.num_qubits))
+        rev_swap_map = {qubits:num_swap for qubits,num_swap in reversed(list(swap_map.items()))} # map from naturally ordered list to some list
+        rev_swaps_circ = QuantumCircuit(self.num_qubits)
+
+        for (q1,q2), num_swaps in swap_map.items():
+            idx_q1 = order.index(q1)
+            idx_q2 = order.index(q2)
+            order[idx_q1] = q2
+            order[idx_q2] = q1
+
+            if idx_q1 < idx_q2:
+                len_to_right = idx_q2 - idx_q1
+                len_to_left = idx_q1 + self.num_qubits - idx_q2
+
+                if len_to_right <= len_to_left and 2*len_to_right-1 == num_swaps:
+                    swap_circ = adjacent_swap(q_start=idx_q1,step=len_to_right,rightward=True)
+                elif len_to_left < len_to_right and 2*len_to_left-1 == num_swaps:
+                    swap_circ = adjacent_swap(q_start=idx_q1, step=len_to_right, rightward=False)
+
+
+            elif idx_q1 > idx_q2:
+                len_to_right = idx_q1 - idx_q2
+                len_to_left = idx_q2 + self.num_qubits - idx_q1
+
+                if len_to_right <= len_to_left and 2 * len_to_right - 1 == num_swaps:
+                    swap_circ = adjacent_swap(q_start=idx_q2, step=len_to_right, rightward=True)
+                elif len_to_left < len_to_right and 2 * len_to_left - 1 == num_swaps:
+                    swap_circ = adjacent_swap(q_start=idx_q2, step=len_to_right, rightward=False)
+
+            else:
+                pass
+            rev_swaps_circ = 1
+
+
+    def multiorder_trotterize(self, num_layers, swap_map=None):
         trotter_circuit = QuantumCircuit(self.num_qubits)
 
         if swap_map is not None:
@@ -69,9 +148,13 @@ class Trotterizer():
                 trotter_circuit.swap(q1,q2)
 
         for i in range(num_layers):
-            layer_circ = self._one_layer(layer_idx=i)
-            trotter_circuit = trotter_circuit.compose(layer_circ)
-            #trotter_circuit.barrier()
+            if i == 0:
+                layer_circ = self._one_layer(layer_idx=i)
+                trotter_circuit = trotter_circuit.compose(layer_circ)
+            else:
+                clusters = self._cluster_qubits(layer_order=i)
+                layer_circ = self._one_layer(layer_idx=i)
+                trotter_circuit = trotter_circuit.compose(layer_circ)
 
         return trotter_circuit
 

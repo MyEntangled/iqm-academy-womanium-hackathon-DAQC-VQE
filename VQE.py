@@ -6,8 +6,8 @@ from qiskit.quantum_info import Statevector
 from qiskit import Aer
 from qiskit.utils import QuantumInstance, algorithm_globals
 from qiskit.algorithms import VQE, NumPyMinimumEigensolver
-#from qiskit.algorithms.optimizers import SPSA, ADAM, SciPyOptimizer, SLSQP, L_BFGS_B, COBYLA
-from qiskit.algorithms.optimizers import *
+from qiskit.algorithms.optimizers import SPSA
+#from qiskit.algorithms.optimizers import *
 from qiskit.circuit.library import TwoLocal
 
 from qiskit import transpile
@@ -15,21 +15,23 @@ from qiskit import transpile
 from qiskit.providers.aer import QasmSimulator
 from qiskit.providers.aer.noise import NoiseModel
 from qiskit.providers.fake_provider import *
-from qiskit import IBMQ
+#from qiskit import IBMQ
 
-from qiskit.opflow.expectations import ExpectationFactory, PauliExpectation
+from qiskit.opflow.expectations import PauliExpectation
 from qiskit.opflow.converters import CircuitSampler
 from qiskit.opflow.state_fns import StateFn, CircuitStateFn
 
-import Connectivity
+#import Connectivity
 import helper
 from Trotterizer import Trotterizer
 from SwapMap import SwapMap
 
 from scipy.optimize import minimize
 
-import os
-os.environ['KMP_DUPLICATE_LIB_OK']='True'
+from qiskit.providers.aer import AerSimulator
+
+#import os
+#os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 seed = 170
 algorithm_globals.random_seed = seed
@@ -42,37 +44,46 @@ class VQE_Solver():
         self.paulis = paulis
         self.pauli_strings = [pauli.primitive.__str__() for pauli in self.paulis]
 
+        #from qiskit.opflow import Z, Y, X, I
         self.H_prob = sum(paulis)
+        #self.H_prob = 1.1*X^I^I^I^Y + 2*Z^I^X^I^I
         self.ansatz = ansatz
 
-    def _transform_paulis(self, transforms):
-        transformed_pauli_strings = []
-        for i in range(len(self.pauli_strings)):
-            string = self.pauli_strings[i]
-            for transform in transforms:
-                string = string.replace(transform[0], transform[1])
-            transformed_pauli_strings.append(string)
+    def transform_paulis(self, qubit_order, update=True):
+        # transformed_pauli_strings = []
+        # for i in range(len(self.pauli_strings)):
+        #     string = self.pauli_strings[i]
+        #     for transform in transforms:
+        #         string = string.replace(transform[0], transform[1])
+        #     transformed_pauli_strings.append(string)
+        #
+        # transformed_paulis = [PauliOp(Pauli(transformed_pauli_strings[idx]), coeff=self.paulis[idx].coeff)
+        #                       for idx in range(len(self.paulis))]
+        # return transformed_paulis
 
-        transformed_paulis = [PauliOp(Pauli(transformed_pauli_strings[idx]), coeff=self.paulis[idx].coeff)
-                              for idx in range(len(self.paulis))]
-        return transformed_paulis
 
-    def true_ground_state_energy(self, observable_transform=None):
-        npme = NumPyMinimumEigensolver()
-        if observable_transform:
-            result = npme.compute_minimum_eigenvalue(operator=sum(self._transform_paulis(observable_transform)))
+        transformed_pauli_strings = [''.join([pauli_string[qubit] for qubit in qubit_order]) for pauli_string in
+                                     pauli_strings]
+        transformed_paulis = [PauliOp(Pauli(transformed_pauli_strings[idx]), coeff=paulis[idx].coeff) for idx in
+                              range(len(paulis))]
+
+        if update is True:
+            self.paulis = transformed_paulis
+            self.pauli_strings = transformed_pauli_strings
+            self.H_prob = sum(paulis)
+            return self.paulis
         else:
-            result = npme.compute_minimum_eigenvalue(operator=self.H_prob)
+            return transformed_paulis
+
+    def true_ground_state_energy(self):
+        npme = NumPyMinimumEigensolver()
+        result = npme.compute_minimum_eigenvalue(operator=self.H_prob)
         ref_value = result.eigenvalue.real
         return ref_value
 
 
-    def numerical_solve(self, observable_transform=None):
-        if observable_transform:
-            transformed_paulis = self._transform_paulis(observable_transform)
-            He = sum(transformed_paulis).to_matrix()
-        else:
-            He = self.H_prob.to_matrix()
+    def numerical_solve(self):
+        He = self.H_prob.to_matrix()
 
         x0 = np.random.normal(size=self.ansatz.num_parameters)
         init_state = Statevector.from_label('0' * num_qubits)
@@ -130,24 +141,42 @@ class VQE_Solver():
         return res
 
     def noisy_simulator_solve(self):
-        os.environ['QISKIT_IN_PARALLEL'] = 'TRUE'
+        #os.environ['QISKIT_IN_PARALLEL'] = 'TRUE'
         #device_backend = FakeNairobi()
 
-        provider = IBMQ.load_account()
-        device_backend = provider.get_backend('ibmq_manila')
+        # provider = IBMQ.load_account()
+        # device_backend = provider.get_backend('ibmq_manila')
+        # device = QasmSimulator.from_backend(device_backend)
+        # coupling_map = device.configuration().coupling_map
+        # noise_model = NoiseModel.from_backend(device)
+        # basis_gates = noise_model.basis_gates
+
+        device_backend = FakeVigo()
+        print(1)
+        backend = Aer.get_backend('aer_simulator')
+        print(2)
+        noise_model = None
+        #device = QasmSimulator.from_backend(device_backend)
         device = QasmSimulator.from_backend(device_backend)
+        print(3)
         coupling_map = device.configuration().coupling_map
+        print(4)
         noise_model = NoiseModel.from_backend(device)
+        print(5)
         basis_gates = noise_model.basis_gates
+        print(6)
 
         print(noise_model)
         print()
 
-        qi = QuantumInstance(backend=Aer.get_backend('aer_simulator'), seed_simulator=seed, seed_transpiler=seed,
-                             coupling_map=coupling_map, noise_model=noise_model)
+        qi = QuantumInstance(backend=backend, seed_simulator=seed, seed_transpiler=seed,
+                             coupling_map=coupling_map, noise_model=noise_model, )
 
         transpiled_ansatz = transpile(self.ansatz, basis_gates=basis_gates, optimization_level=3)
         print(transpiled_ansatz.draw())
+
+        #var_form = TwoLocal(num_qubits=len(self.pauli_strings[0]), rotation_blocks='ry', entanglement_blocks='cz')
+
         psi = CircuitStateFn(transpiled_ansatz)
         measurable_expression = StateFn(self.H_prob, is_measurement=True).compose(psi)
         expectation = PauliExpectation().convert(measurable_expression)
@@ -157,7 +186,8 @@ class VQE_Solver():
             circuit_sampler = CircuitSampler(qi)
             print('CIRCUIT SAMPLER')
             bound_expectation = expectation.assign_parameters(dict(zip(expectation.parameters, x)))
-            print(bound_expectation)
+            print("BOUND EXPECTATION")
+
             sampler = circuit_sampler.convert(bound_expectation)
             print('SAMPLER')
             energy = sampler.eval().real
@@ -168,6 +198,15 @@ class VQE_Solver():
         optimizer = SPSA()
         print('HI')
         res = optimizer.minimize(fun=func,x0=x0)
+
+        # spsa = SPSA(maxiter=10)
+        # var_form = TwoLocal(num_qubits=len(self.pauli_strings[0]),rotation_blocks='ry', entanglement_blocks='cz')
+        # print(ansatz.draw())
+        # print('-------')
+        # print(transpiled_ansatz.draw())
+        # vqe = VQE(var_form, optimizer=spsa, callback=None, quantum_instance=qi)
+        # print('VQE start')
+        # res = vqe.compute_minimum_eigenvalue(operator=self.H_prob)
         return res
 
 
@@ -182,7 +221,7 @@ class VQE_Solver():
         pylab.plot()
 
 if __name__ == '__main__':
-    num_qubits = 6
+    num_qubits = 10
 
     from qiskit.quantum_info import Pauli
     from qiskit.opflow.primitive_ops import PauliOp
@@ -200,13 +239,18 @@ if __name__ == '__main__':
     # Y: -13.249
     # X: -13.279
 
-    paulis = helper.generate_random_hamiltonian(num_qubits=num_qubits, interaction_size=3, seed=2711)
+    #paulis = helper.generate_random_hamiltonian(num_qubits=num_qubits, interaction_size=2, seed=2002)
+    pauli_strings = [pauli.primitive.__str__() for pauli in paulis]
     print(paulis)
 
-    swap_map = SwapMap(paulis).get_swap_map(map_type='circular')
+    #SwapMap(paulis).
+
+    qubit_order, swap_map = SwapMap(paulis).reorder_qubits(map_type='circular')
+    print(qubit_order)
     print(swap_map)
+
     trotterizer = Trotterizer(num_qubits, paulis, 'ZX_cycle')
-    ansatz = trotterizer.trotterize(num_layers=2, swap_map=swap_map)
+    ansatz = trotterizer.trotterize(num_layers=2)
     print(ansatz.num_parameters)
 
     # ansatz = TwoLocal(num_qubits, rotation_blocks='ry', entanglement_blocks='cz',
@@ -214,17 +258,19 @@ if __name__ == '__main__':
     # print(ansatz.num_parameters)
 
     VQE_solver = VQE_Solver(paulis, ansatz)
+    print(VQE_solver.paulis)
 
-    transform = None
-    transform = [('X', 'Z'), ('Y', 'X'), ('Z', 'Y')]
-    transform = [('X', 'Y'), ('Y', 'Z'), ('Z', 'X')]
+    ## Reorder qubits
+    VQE_solver.transform_paulis(qubit_order=qubit_order, update=True)
+    print(VQE_solver.paulis)
 
-    ground_energy = VQE_solver.true_ground_state_energy(observable_transform=transform)
+
+    ground_energy = VQE_solver.true_ground_state_energy()
     print("Ground Energy", ground_energy)
     # print('Difference', noiseless_energy - ground_energy)
 
 
-    res = VQE_solver.numerical_solve(observable_transform=transform)
+    res = VQE_solver.numerical_solve()
     print("Optimized function value", res.fun)
     print(res.message, res.success)
 

@@ -84,7 +84,6 @@ class SwapMap():
         return G
 
 
-
     def _find_optimal_map_brute_force(self, connectivity_graph):
         H_graph = self._Hamiltonian_graph()
         edges = list(connectivity_graph.edges())
@@ -92,37 +91,37 @@ class SwapMap():
 
         s_min = 1e9
         mapping = ()
-        for i in edge_perms:
+        for edge_perm in edge_perms:
             s_tmp = 0
-            for j in edges:
-                if H_graph.has_edge(i[j[0]], i[j[1]]):
-                    s_tmp += H_graph.get_edge_data(i[j[0]], i[j[1]])['weight']
+            for edge in edges:
+                if H_graph.has_edge(edge_perm[edge[0]], edge_perm[edge[1]]):
+                    s_tmp += H_graph.get_edge_data(edge_perm[edge[0]], edge_perm[edge[1]])['weight']
 
             if s_min > s_tmp:
                 s_min = s_tmp
-                mapping = i
+                mapping = edge_perm
 
         return mapping, s_min
 
     def _count_swaps(self, mapping, connectivity_graph):
         node_list = list(connectivity_graph.nodes())
-        new_map = list(mapping)
+
+        new_map = list(mapping).copy()
         swap_map = {}
-        # print(new_map)
-        # print(G_connectivity.nodes())
+
         for j in range(len(node_list) - 1):
             cost = 0
-            if new_map[j] != node_list[j]:
+            if new_map[j] != list(connectivity_graph.nodes())[j]:
                 for k in range(j + 1, len(node_list)):
-                    if new_map[k] == node_list[j]:
+                    if new_map[k] == list(connectivity_graph.nodes())[j]:
                         cost = nx.shortest_path_length(connectivity_graph, new_map[j], new_map[k])
                         if cost != 1:
                             cost = cost * 2 - 1
                         swap_map[(new_map[j], new_map[k])] = cost
-                        list(new_map)[j], list(new_map)[k] = list(new_map)[k], list(new_map)[j]
+                        new_map[j], new_map[k] = list(new_map)[k], list(new_map)[j]
         return swap_map
 
-    def get_swap_map(self, map_type, grid_size=None):
+    def reorder_qubits(self, map_type, grid_size=None,):
         connectivity_graph = None
         if map_type == 'linear':
             connectivity_graph = self._create_path_connectivity_graph(is_cycle=False)
@@ -131,7 +130,7 @@ class SwapMap():
         elif map_type == 'grid':
             connectivity_graph = self._create_grid_connectivity_graph(grid_size)
 
-        mapping, map_weight = self._find_optimal_map_brute_force(connectivity_graph)
-        swap_map = self._count_swaps(mapping, connectivity_graph)
+        qubits_order, map_weight = self._find_optimal_map_brute_force(connectivity_graph)
+        swap_map = self._count_swaps(qubits_order, connectivity_graph)
 
-        return swap_map
+        return qubits_order, swap_map
