@@ -9,6 +9,9 @@ from itertools import permutations
 
 
 class SwapMap():
+    '''
+    Determine the qubit configuration at the beginning and swap layers from layer 2 onwards.
+    '''
     def __init__(self, paulis):
         self.paulis = paulis
         self.pauli_strings = [pauli.primitive.__str__() for pauli in self.paulis]
@@ -89,7 +92,7 @@ class SwapMap():
         edges = list(connectivity_graph.edges())
         edge_perms = list(permutations(range(self.num_qubits)))
 
-        s_min = 1e9
+        s_max = 0
         mapping = ()
         for edge_perm in edge_perms:
             s_tmp = 0
@@ -97,17 +100,21 @@ class SwapMap():
                 if H_graph.has_edge(edge_perm[edge[0]], edge_perm[edge[1]]):
                     s_tmp += H_graph.get_edge_data(edge_perm[edge[0]], edge_perm[edge[1]])['weight']
 
-            if s_min > s_tmp:
-                s_min = s_tmp
+            if s_tmp > s_max:
+                s_max = s_tmp
                 mapping = edge_perm
 
-        return mapping, s_min
+        return mapping, s_max
 
-    def _count_swaps(self, mapping, connectivity_graph):
+    def _count_swaps(self, mapping, connectivity_graph=None):
+        if connectivity_graph is None:
+            connectivity_graph = self._create_path_connectivity_graph(is_cycle=True)
+
         node_list = list(connectivity_graph.nodes())
 
         new_map = list(mapping).copy()
         swap_map = {}
+
 
         for j in range(len(node_list) - 1):
             cost = 0
