@@ -1,8 +1,11 @@
 # Digital-analog Variational Quantum Eigensolver
 
 Team: Quantum AKB Members (Github ID, Discord ID, Email) 
-Minh Tam (NA, naito#0166, minh27112001@gmail.com) --> Pitch Presenter 
+
+Minh Tam (naito27, naito#0166, minh27112001@gmail.com) --> Pitch Presenter 
+
 Bao Bach (bachbao, bbace#5583, bao.bachbbace12@hcmut.edu.vn)
+
 Trong Duong (MyEntangled, Junocyrus#4481, trongduong0299@gmail.com)
 
 Challenge: Digital-analog Variational Quantum Eigensolver by IQM
