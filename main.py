@@ -42,7 +42,7 @@ def DAVQE(num_qubits:int, paulis:Union[str,list], davqe_ansatz:bool, num_layers:
         print("Optimization result", res)
 
     else:
-        ansatz = TwoLocal(num_qubits=num_qubits, reps=num_layers, rotation_blocks='ry', entanglement_blocks='cz')
+        ansatz = TwoLocal(num_qubits=num_qubits, reps=num_layers, rotation_blocks='ry', entanglement_blocks='cz', entanglement='circular')
         res = VQE_solver.numerical_solve(ansatz)
         print("Optimization result", res)
     return

@@ -20,6 +20,7 @@ from qiskit.opflow.expectations import PauliExpectation
 from qiskit.opflow.converters import CircuitSampler
 from qiskit.opflow.state_fns import StateFn, CircuitStateFn
 
+import helper
 from Trotterizer import Trotterizer
 from SwapMap import SwapMap
 
@@ -175,38 +176,21 @@ class VQE_Solver():
         return res
 
 
-
-
 if __name__ == '__main__':
     num_qubits = 5
 
-    local_terms = ['I'*i + 'Z' + 'I'*(num_qubits-1-i) for i in range(num_qubits)]
-    twobodyX_terms = ['I'*i + 'XX' + 'I'*(num_qubits-2-i) for i in range(num_qubits-1)]
-    twobodyX_terms.append('X' + 'I'*(num_qubits-2) + 'X')
-    twobodyY_terms = ['I'*i + 'YY' + 'I'*(num_qubits-2-i) for i in range(num_qubits-1)]
-    twobodyY_terms.append('Y' + 'I'*(num_qubits-2) + 'Y')
-    paulis = []
-    paulis += [PauliOp(Pauli(term), coeff=0.75) for term in local_terms]
-    paulis += [PauliOp(Pauli(term), coeff=1.) for term in twobodyX_terms]
-    paulis += [PauliOp(Pauli(term), coeff=1.) for term in twobodyY_terms]
-
-
+    ## Define the Hamiltonian by a list of Pauli terms
+    paulis = helper.generate_ZZX_chain_hamiltonian(num_qubits, d=0, l=0.75)
     # paulis = [4 * Y ^ I ^ I ^ Y ^ I, 2 * Y ^ Z ^ I ^ I ^ I, 4 * Y ^ I ^ Y ^ I ^ I, 5 * I ^ Y ^ I ^ Y ^ I, 1 * I ^ Z ^ Y ^ I ^ I,
     #  4 * I ^ Y ^ I ^ I ^ X, 2 * I ^ I ^ X ^ I ^ X, I ^ I ^ I ^ Y ^ Z, 4 * Y ^ I ^ I ^ I ^ Z]
-
     #paulis = helper.generate_random_hamiltonian(num_qubits=num_qubits, interaction_size=2, seed=2002)
+
     pauli_strings = [pauli.primitive.__str__() for pauli in paulis]
     print(paulis)
-
 
     qubit_order, swap_map = SwapMap(paulis).reorder_qubits(map_type='circular')
     print(qubit_order)
     print(swap_map)
-
-    # ansatz = TwoLocal(num_qubits, rotation_blocks='ry', entanglement_blocks='cz',
-    #                   entanglement='circular', reps=5)
-    # print(ansatz.num_parameters)
-
 
     VQE_solver = VQE_Solver(paulis)
 
