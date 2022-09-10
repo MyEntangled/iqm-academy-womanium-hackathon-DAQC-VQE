@@ -71,7 +71,7 @@ class ZX_Cycle():
         # Decoupling pauli according to new_qubit_order
         for i in range(len(new_qubit_order)):
             if connectivity_count[new_qubit_order[i], new_qubit_order[(i+1)%self.num_qubits]] == 0:
-                decoupling_pauli[(i+1) % self.num_qubits] = 'Z'
+                decoupling_pauli[(i+1) % self.num_qubits] = 'Y'
             else:
                 decoupling_pauli[(i+1) % self.num_qubits] = 'i'
 
